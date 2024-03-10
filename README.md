@@ -13,12 +13,12 @@ This project implements the pseudocode presented in the paper titled "CLASSIFICA
 
 ## Example
 
-
-
-
 ### Description
 
-Provide a brief description of the example you've created to demonstrate the code implementation.
+The dataset I created consists of 3 concentric rings which 100 datapoint each and of 3 points which represent a sepearate class which are located in the upper left corner near the outer ring. Each ring consists of 100 points randomly distributed in the ring representing a specific class. The 3 points in the upper left corner where added to test the algorithm on data with very few examples (on such datapoints machine learning algorithm often fail due to the little amount of data). For each ring 20 points where labelled (class 1 to 3), for the 3 outter points only one was labelled (class 4) and the rest was unlabelled data (class 0) which the algorithm needs to classify. 
+<img width="324" alt="image001" src="https://github.com/Loic0808/Topological-data-analysis-implementation-example/assets/162875696/9d2506d5-8896-4597-9a56-bccd0171d2aa">
+
+
 
 ### Usage
 
