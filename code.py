@@ -8,8 +8,6 @@
 
 import gudhi as gd
 import sympy as sp
-#from sympy import *
-#from ripser import Rips
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -278,41 +276,6 @@ def Psi(v, K_list, df, num_symbols):
         if Xi_K_sigma is not None:  # Check if Xi_K_sigma is not None
             result += (1/(Xi_K_sigma)**2)*Phi(sigma, K_list, df, num_symbols) # Take the square to put more weight on vectors near
     return result
-
-"""# The points correspond to simplices (and in our case to they coincide with the index)
-data['Simplex'] = data.index
-
-# Keep rows with the unknown labelled points
-data_filtered = data[data['label'] == 0]
-
-# Drop the 'label' column
-X = data_filtered.drop(columns=['label'])
-
-# Function to change labels randomly to 0
-def change_labels(df, label_column, percentage):
-    labels = df[label_column].unique()
-    new_df = df.copy()
-    for label in labels:
-        indices_to_change = np.random.choice(
-            new_df.index[new_df[label_column] == label],
-            size=int(len(new_df[new_df[label_column] == label]) * percentage),
-            replace=False
-        )
-        new_df.loc[indices_to_change, label_column] = '0'
-    return new_df
-
-# Define a function to map labels
-def map_label(label):
-    if label == '0':
-        return 'p'
-    else:
-        return 'k'
-
-# Applying the function
-new_df = change_labels(data, 'label', 0.8)
-# Apply the function to see which labels where predicted and which we knew already
-new_df['Predicted or known'] = new_df['label'].apply(map_label)
-"""
 
 def psi_F(epsilon_i):
     # We assume epsilon_i is contained in epsilon_list. We then access directly the simplicial complex K_i in the dictionnary above instead of creating
