@@ -22,7 +22,9 @@ After running the algorithm once on the dataset, we get the following results. T
 <img width="324" alt="image002" src="https://github.com/Loic0808/Topological-data-analysis-implementation-example/assets/162875696/428fec38-9830-4b6d-97e7-242e010be719"> <br>
 After running it multiple times, the results are:<br>
 <img width="324" alt="image003" src="https://github.com/Loic0808/Topological-data-analysis-implementation-example/assets/162875696/3f6f6429-26b0-4c36-bff5-d57dca0af766"><br>
-We see that almost all points have been correctly classified.
+We see that almost all points have been correctly classified. This result was obtained using the following list of epsilon parameters: epsilon_list = [0.2, 0.3, 0.3, 0.3, 0.4, 0.3, 0.5, 0.6, 0.6, 0.7, 0.8, 0.9, 1]. In thius example I used intuition to implement it, but in general one doesn't have such intuition. This is why I improved the algorithm so, that multiple such lists are generated at random and used for the algorithm. The results for each list are stored in a dataset and at the end we take the label which appeared most. This ensures that even if taken randomly, the epsilon allow to choose the best label. <br>
+
+I also modified the function which creates the Link for faster computations, by only looking at the simplices which are near the point we look at.
 
 ### Usage
 
