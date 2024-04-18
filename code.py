@@ -1,11 +1,3 @@
-# """
-# %%capture
-# %pip install ripser
-# %pip install gudhi
-# %pip install sympy
-# %pip install -U numpy
-# """
-
 import gudhi as gd
 import sympy as sp
 import matplotlib.pyplot as plt
@@ -81,78 +73,116 @@ plt.show()
 # Extract x and y coordinates as a numpy array
 points = data[['x', 'y']].values
 
-"""Remark: We need to pay attention that the dimension of the data (in our case 2) is much smaller than the number of points of our dataset (303). The set P is given by all points, the set S is given by the points which have a label 1, 2, or 4, and the set X is given by the points with Label 0.
+num_of_it = 3
 
+label_df = pd.concat([data["label"]] * num_of_it, axis=1)
+iteration_df = pd.concat([data, label_df], axis=1)
+
+num_label_columns = label_df.shape[1]
+label_column_names = [f"label_{i+1}" for i in range(num_label_columns)]
+iteration_df.columns = list(data.columns) + label_column_names
+
+display(iteration_df)
+
+"""### Create class for the TDA algorithm
+
+Remark: We need to pay attention that the dimension of the data (in our case 2) is much smaller than the number of points of our dataset (303). The set P is given by all points, the set S is given by the points which have a label 1, 2, or 4, and the set X is given by the points with Label 0.
 """
 
-# Step size of the filtration
+"""
+The following class allows to construct a filtered simplicial complex K, with initial epsilon given by epsilon_0 and increment size epsilon_i.
+"""
+
+class FilteredSimplicialComplex:
+    def __init__(self, epsilon_0, epsilon_increment, max_filtration_level, max_dimension_of_complex, points):
+        self.epsilon_i = epsilon_0
+        self.epsilon_increment = epsilon_increment
+        self.epsilon_list = [] #[self.epsilon_i]
+        self.max_filtration_level = max_filtration_level
+        self.max_dimension_of_complex = max_dimension_of_complex
+        self.points = points # type numpy.ndarray
+
+        # K represents the filtered simplicial complex. We initialise it with an empty complex
+        self.K = gd.SimplexTree()
+
+        # This dictionnary will contain the individual simplicial complexes that will compose K
+        self.Simplicial_complexes = {}
+
+        #The following list of tuppels will give the filtration value (see definition) for each simplex
+        self.Filtration_value = []
+
+        # For each epsilon_i = epsilon_0 + i*epsilon we create a simplicial complex K_i and add it to the filtered simplicial complex K
+        for i in range(self.max_filtration_level):
+            # Build simplicial Rips complex
+            skeleton = gd.RipsComplex(
+                points = self.points,
+                max_edge_length = self.epsilon_i
+            )
+            K_i = skeleton.create_simplex_tree(self.max_dimension_of_complex)
+            #print("Iteration: ", i, ",", "epsilon_i = ", self.epsilon_i, ",", "K_i != K: ", K_i != self.K)
+
+            if K_i != self.K:
+                # Join K_i to K
+                rips_filtration = K_i.get_filtration()
+                rips_list = list(rips_filtration)
+                # Add the Komplex to the dictionnary
+                Simplicial_complex = f"K_{i}"
+                self.Simplicial_complexes[Simplicial_complex] = rips_list
+
+                for splx in rips_list :
+                    # splx[0] represent the coordinates of the simplex and splx[1] is the biggest distance between two points
+                    self.K.insert(splx[0], splx[1])
+                    self.Filtration_value.append((splx[0], self.epsilon_i))
+
+            else:
+                # Add the complex at step i and use the one calculated at step i-1
+                j = i-1
+                Simplicial_complex = f"K_{i}"
+                self.Simplicial_complexes[Simplicial_complex] = self.Simplicial_complexes[f"K_{j}"]
+
+            self.epsilon_list.append(self.epsilon_i)
+            self.epsilon_i = self.epsilon_i + self.epsilon_increment
+
+        # Now we assign to each simplex the smallest value epsilon such that the simplex is present in the simplicial complex K_i
+        self.min_x_values = {}
+
+        # Iterate through the list of tuples
+        for sublist, x in self.Filtration_value:
+            sublist_tuple = tuple(sublist)  # Convert the list to a tuple
+            if sublist_tuple in self.min_x_values:
+                # If sublist already exists in self.min_x_values, update the minimum x value if necessary
+                if x < self.min_x_values[sublist_tuple]:
+                    self.min_x_values[sublist_tuple] = x
+            else:
+                # If sublist is not in self.min_x_values, add it with its corresponding x value
+                self.min_x_values[sublist_tuple] = x
+
+        # Filter the original list based on the minimum x values
+        self.Xi_K = [(sublist, x) for sublist, x in self.Filtration_value if x == self.min_x_values[tuple(sublist)]]
+
+    def get_dimension(self):
+        return self.K.dimension()
+
+    def get_num_vertices(self):
+        return self.K.num_vertices()
+
+    def get_num_simplices(self):
+        return self.K.num_simplices()
+
+    def psi_F(self, epsilon_i):
+        # We assume epsilon_i is contained in epsilon_list. We then access directly the simplicial complex K_i in the dictionnary above instead of creating
+        # a new one.
+        i = self.epsilon_list.index(epsilon_i)
+        simplicial_complex = f"K_{i}"
+        K_i_list = self.Simplicial_complexes[simplicial_complex]
+        return K_i_list
+
 epsilon = 0.1
-# Initialize epsilon_0 with a very small value strictly bigger than 0
-epsilon_i = 0.00001
-# Initialize the list containing all epsilons
-epsilon_list = [epsilon_i]
-# Maximum number of iterations
-max_filtration_level = 11
+epsilon_0 = 0.00001
+max_filtration_level = 10 #11
+max_dimension_of_complex = 100
 
-# K represents the filtered simplicial complex. We initialise it with an empty complex
-K = gd.SimplexTree()
-
-# This dictionnary will contain the individual simplicial complexes that will compose K
-Simplicial_complexes = {}
-
-#The following list of tuppels will give the filtration value (see definition) for each simplex
-Filtration_value = []
-
-# For each epsilon_i = epsilon_0 + i*epsilon we create a simplicial complex K_i and add it to the filtered simplicial complex K
-for i in range(max_filtration_level):
-    # Build simplicial Rips complex
-    skeleton = gd.RipsComplex(
-        points = points,
-        max_edge_length = epsilon_i
-    )
-    K_i = skeleton.create_simplex_tree(max_dimension = 100)
-
-    print("Iteration: ", i, ",", "epsilon_i = ", epsilon_i, ",", "K_i != K: ", K_i != K)
-
-    if K_i != K:
-        # Join K_i to K
-        rips_filtration = K_i.get_filtration()
-        rips_list = list(rips_filtration)
-        # Add the Komplex to the dictionnary
-        Simplicial_complex = f"K_{i}"
-        Simplicial_complexes[Simplicial_complex] = rips_list
-
-        for splx in rips_list :
-            K.insert(splx[0], splx[1])
-            Filtration_value.append((splx[0], epsilon_i))
-
-    else:
-        # Add the complex at step i and use the one calculated at step i-1
-        j = i-1
-        Simplicial_complex = f"K_{i}"
-        Simplicial_complexes[Simplicial_complex] = Simplicial_complexes[f"K_{j}"]
-
-    epsilon_i = epsilon_i + epsilon
-    epsilon_list.append(epsilon_i)
-
-# Now we assign to each simplex the smallest value epsilon such that the simplex is present in the simplicial complex K_i
-min_x_values = {}
-
-# Iterate through the list of tuples
-for sublist, x in Filtration_value:
-    sublist_tuple = tuple(sublist)  # Convert the list to a tuple
-    if sublist_tuple in min_x_values:
-        # If sublist already exists in min_x_values, update the minimum x value if necessary
-        if x < min_x_values[sublist_tuple]:
-            min_x_values[sublist_tuple] = x
-    else:
-        # If sublist is not in min_x_values, add it with its corresponding x value
-        min_x_values[sublist_tuple] = x
-
-# Filter the original list based on the minimum x values
-Xi_K = [(sublist, x) for sublist, x in Filtration_value if x == min_x_values[tuple(sublist)]]
-
-print(K.dimension(), K.num_vertices(), K.num_simplices())
+K_class = FilteredSimplicialComplex(epsilon_0, epsilon, max_filtration_level, max_dimension_of_complex, points)
 
 # Checks if simplex is in simplicial complex
 def check_list_in_tuples(list_of_tuples, L):
@@ -183,16 +213,16 @@ def create_symbols(n):
     Generate n sympy symbols with names s_i.
 
     Parameters:
-        n (int): Number of symbols to generate.
+    n (int): Number of symbols to generate.
 
     Returns:
-        symbols (list): List of generated sympy symbols.
+    symbols (list): List of generated sympy symbols.
     """
     symbols = [sp.symbols('s{}'.format(i)) for i in range(1, n + 1)]
     return symbols
 
 
-def Phi(sigma, K_list, df, num_symbols):
+def Phi(sigma, K_list, df, j, num_symbols):
     # sigma is a simplex given as a list as found in a simplicial complex when using the .get_filtration() method
     # K_list is the list of simplices contained in the simplicial complex K_i
     # df is the datarframe with the labels and the vectors
@@ -216,7 +246,7 @@ def Phi(sigma, K_list, df, num_symbols):
             # Find the row where the values match
             result = find_row_with_array(point, df)
             # Get label of Simplex S
-            label = result['label']
+            label = result[f'label_{j}']
 
             # Important remark: The class 0 is represented by the string '0' and the other classes are represented by integers
             if not label.empty and label.iloc[0] == 0:
@@ -258,6 +288,24 @@ def Lk_K(sigma, K_list):
     result = [sublist for sublist in result if sublist]
     return result
 
+def Lk_K_approx(sigma, K_list):
+    """
+    Same input as above
+
+    result an approximation of Lk_K for faster computations
+    """
+    simplex_list = St_K(sigma, K_list)
+    result = []
+    for sublist in simplex_list:
+        filtered_sublist = [num for num in sublist if num not in sigma]
+        result.append(filtered_sublist)
+        limit = 40
+        if len(result) > limit:
+            break
+
+    result = [sublist for sublist in result if sublist]
+    return result
+
 # Funtion to access the epsilon_i of a specific simplex using the list Xi_K defined above
 def find_number_by_list(list_of_tuples, given_list):
     for sublist, number in list_of_tuples:
@@ -266,25 +314,17 @@ def find_number_by_list(list_of_tuples, given_list):
     return None  # Return None if the given list is not found in any tuple
 
 
-def Psi(v, K_list, df, num_symbols):
+def Psi(v, K_list, df, j, num_symbols):
     # From here note that v is a simplex with only one vertex, i.e. of dimension 0
-    Lk_K_v = Lk_K(v, K_list)
+    Lk_K_v = Lk_K_approx(v, K_list) # Lk_K
     result = 0
+    #print(len(Lk_K_v))
     for sigma in Lk_K_v:
         # Access Xi_K(sigma) using the set Xi_K and function find_number_by_list. This is the smallest radius epsilon_i such that the sigma appears in K_i
-        Xi_K_sigma = find_number_by_list(Xi_K, sigma)
+        Xi_K_sigma = find_number_by_list(K_class.Xi_K, sigma)
         if Xi_K_sigma is not None:  # Check if Xi_K_sigma is not None
-            result += (1/(Xi_K_sigma)**2)*Phi(sigma, K_list, df, num_symbols) # Take the square to put more weight on vectors near
+            result += (1/(Xi_K_sigma)**2)*Phi(sigma, K_list, df, j, num_symbols) # Take the square to put more weight on vectors near
     return result
-
-def psi_F(epsilon_i):
-    # We assume epsilon_i is contained in epsilon_list. We then access directly the simplicial complex K_i in the dictionnary above instead of creating
-    # a new one.
-    i = epsilon_list.index(epsilon_i)
-    simplicial_complex = f"K_{i}"
-    K_i_list = Simplicial_complexes[simplicial_complex]
-    return K_i_list
-
 
 def labelling(expr):
     if expr == 0:
@@ -304,54 +344,79 @@ def labelling(expr):
             symbol_with_max_coefficient = symbol
     return symbol_with_max_coefficient
 
-k = 10
-epsilons = random.sample(epsilon_list, k)
-print(epsilons)
-
-length = len(epsilons)
-
 # Get the number of labels
 num_symbols = len(label_list)
 generators = create_symbols(num_symbols)
 
-for i in range(0, length):
-    # Keep rows with the unknown labelled points
-    data_filtered = data[data['label'] == 0]
+length = 10
+epsilons = []
+for i in range(num_of_it):
+    epsilons.append(random.choices(K_class.epsilon_list, k=length))
 
-    # Drop the 'label' column
-    X = data_filtered.drop(columns=['label'])
+print(epsilons)
 
-    if data_filtered.empty:
-        break
+for j in range(num_of_it):
+    print("#######################################################################")
+    for i in range(0, length):
+        # Keep rows with the unknown labelled points
+        data_filtered = iteration_df[iteration_df[f"label_{j+1}"] == 0]
 
-    # psi_F already outputs lists
-    rips_list_K_i = psi_F(epsilons[i])
+        # Drop the "label_{i+1}" column
+        X = data_filtered[['x', 'y']] #data_filtered.drop(columns=[f"label_{i+1}"])
 
-    # Create a dictionary to store results
-    results_dict = {}
+        if data_filtered.empty:
+            break
 
-    # Iterate through selected rows and apply the algorithm
-    for index, row in X.iterrows():
-        # simplex_number = row['Simplex']
-        simplex = [index]
-        result = Psi(simplex, rips_list_K_i, data, num_symbols)
-        result = labelling(result)
-        results_dict[index] = result
+        sub_list = epsilons[j]
 
-    # Add results to the dataframe
-    for simplex, label in results_dict.items():
-        if label in generators:
-            symbol_index = generators.index(label)
-            data["label"].loc[simplex] = label_list[symbol_index]  # labels_list contains labels corresponding to symbols
-        else:
-            data["label"].loc[simplex] = 0
+        # psi_F already outputs lists
+        rips_list_K_i = K_class.psi_F(sub_list[i])
+
+        # Create a dictionary to store results
+        results_dict = {}
+
+        # Iterate through selected rows and apply the algorithm
+        for index, row in X.iterrows():
+            # simplex_number = row['Simplex']
+            simplex = [index]
+            result = Psi(simplex, rips_list_K_i, iteration_df, j+1, num_symbols)
+            #print(result)
+            result = labelling(result)
+            results_dict[index] = result
+
+
+        # Add results to the dataframe
+        for simplex, label in results_dict.items():
+            if label in generators:
+                symbol_index = generators.index(label)
+                iteration_df[f"label_{j+1}"].loc[simplex] = label_list[symbol_index]  # labels_list contains labels corresponding to symbols
+            else:
+                iteration_df[f"label_{j+1}"].loc[simplex] = 0
+
+display(iteration_df)
+
+# Define a function to find the most common value in a row
+def most_common(row):
+    counts = row.value_counts()
+    max_count = counts.max()
+    most_common_values = counts[counts == max_count].index.tolist()
+    return np.random.choice(most_common_values)
+
+# Apply the function row-wise to fill the missing values
+iteration_df['label'] = iteration_df.apply(lambda row: most_common(row.dropna()), axis=1)
+
+final_df = iteration_df[['x', 'y', 'label']]
 
 # Plotting
 fig4, ax4 = plt.subplots()
-for label, group in data.groupby('label'):
+for label, group in final_df.groupby('label'):
     ax4.scatter(group['x'], group['y'], c=colors[label], label=label)
 ax4.legend()
 plt.xlabel('x')
 plt.ylabel('y')
 plt.title('Scatter plot with colored labels')
 plt.show()
+
+# Count occurrences of each integer in 'label'
+counts = final_df['label'].value_counts()
+print(counts)
